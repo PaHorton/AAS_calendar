@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AAS Calendar Fixer</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+</head>
+<body>
+  <section class="section">
+    <div class="container">
+      <h1 class="title has-text-centered">AAS Calendar Fixer</h1>
+      <div class="columns is-centered">
+        <div class="column is-half">
+            <article class="message pb-3">
+                <div class="message-header">
+                    <p>Can't import the conference itinerary into your calendar?</p>
+                </div>
+                <div class="message-body">
+                    I couldn't either, so I scripted a little tool to parse through the <code>.ics</code> file and fix some of the issues.
+                    In particular, this fixed issues with the time sometimes missing a digit and not having a time zone.
+                    It also (tries) to fix broken descriptions...
+                </div>
+                <article class="message is-danger mx-3">
+                    <div class="message-body">
+                        Your mileage may vary with this, it worked for my calendar import but might not work for yours. 
+                        I'd highly recommend <b>importing into an empty calendar</b> so you can delete it if the import fails.    
+                    </div>
+                </article>
+            </article>
+        </div>
+        </div>
+      <div class="field">
+        <div class="file has-name is-centered is-boxed">
+            <label class="file-label">
+              <input class="file-input" type="file" id="fileInput" accept=".ics">
+              <span class="file-cta">
+                <span class="file-icon">
+                  <i class="fas fa-upload"></i>
+                </span>
+                <span class="file-label has-text-centered">
+                    Drag and drop a file here or click to browse
+                </span>
+              </span>
+              <span class="file-name has-text-centered" id="fileName" style="max-width: inherit;">
+              </span>
+            </label>
+        </div>
+      </div>
+      <div class="field is-grouped is-grouped-centered">
+        <div class="control">
+          <button class="button is-link" id="downloadLink" download disabled>Download Fixed</a>
+        </div>
+      </div>
+    </div>
+  </section>
+  <footer class="footer is-fixed-bottom">
+    <div class="content has-text-centered">
+      <p>
+        Made with &hearts; by <a href="https://hortonpaul.com">Paul Horton</a>
+      </p>
+    </div>
+  </footer>
+  <script src="https://kit.fontawesome.com/b8f7635766.js" crossorigin="anonymous"></script>
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const editBtn = document.getElementById('editBtn');
+    const downloadLink = document.getElementById('downloadLink');
+
+    fileInput.addEventListener('change', () => {
+      // Check if a file is selected
+      if (fileInput.files.length > 0) {
+        // Update the file name
+        fileName.textContent = fileInput.files[0].name;
+        // Enable the edit button
+        downloadLink.disabled = false;
+      }
+    });
+    let test_val;
+    downloadLink.addEventListener('click', async () => {
+        // Get the file object
+        const file = fileInput.files[0];
+        // Edit the file here
+        const fixedFile = await modifyCal(file);
+        // Create an object URL for the edited file
+        const fixedFileURL = URL.createObjectURL(fixedFile);
+        // Set the href attribute of the download link
+        const a = document.createElement('a');
+        a.href = fixedFileURL;
+        a.download = file.name.replace(/(\.[\w\d_-]+)$/i, '_fixed$1');;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
+
+    async function modifyCal(file) {
+        // Create a FileReader object
+        const reader = new FileReader();
+        // Read the file as text
+        const text = await new Promise((resolve, reject) => {
+            reader.onerror = () => {
+            reader.abort();
+            reject(new DOMException('Problem parsing input file.'));
+            };
+            reader.onload = () => {
+            resolve(reader.result);
+            };
+            reader.readAsText(file);
+        });
+        // Split the text into lines
+        const lines = text.split(/\r\n|\n/);
+        // Initialize an array to store the modified lines
+        const modifiedLines = [];
+        // Iterate over the lines
+        let lastWord = "";
+        for (const line of lines) {
+            // Use a regular expression to extract the capitalized word before the colon
+            const matches = /^([A-Z]+):(.*)$/.exec(line);
+            if (matches) {
+                // Get the capitalized word and the part after the colon
+                const word = matches[1];
+                const rest = matches[2];
+                if (word == "DTSTART" || word == "DTEND") {
+                    modifiedLines.push(line + (rest.length != 15 ? "0" : ""));
+                } else if (word == "PRODID") {
+                    modifiedLines.push(line);
+                    modifiedLines.push("TZID:US/Pacific")
+                } else {
+                    modifiedLines.push(line);
+                }
+                lastWord = word;
+            } else {
+                if (lastWord == "DESCRIPTION") {
+                    modifiedLines[modifiedLines.length-1] = modifiedLines[modifiedLines.length-1] + "\\n" + line;
+                }
+            }
+        }
+        // Join the modified lines into a single string
+        const modifiedText = modifiedLines.join('\n');
+        // Create a blob object representing the modified file
+        const modifiedFile = new Blob([modifiedText], { type: file.type });
+        // Return the modified file
+        return modifiedFile;
+    }
+
+  </script>
+</body>
+</html>
